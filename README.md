@@ -7,3 +7,4 @@ Run sdrstack once it had continuous run support, so it periodically integrates a
 # To-Do
 - Rotctl support for rotator controls (more data)
 - Test system
+- Make more analysis pipelines

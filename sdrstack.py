@@ -1,6 +1,6 @@
 #!/usr/bin python3
 """
-RTL-SDR hydrogen line FFT integrator (windowed PSD averaging) by Taj Entabi
+RTL-SDR hydrogen line FFT integrator (windowed PSD averaging)
 """
 
 from rtlsdr import RtlSdr

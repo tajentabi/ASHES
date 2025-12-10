@@ -104,7 +104,8 @@ def main():
             psd_db = 10*np.log10(psd_avg + 1e-20)
             Path(".").mkdir(parents=True, exist_ok=True)
             # Append timestamp from internal RTC and save frequency domain to npz
-            OUTFILE=f"{OUTFILE_SUFFIX}_{now.year}.{now.day}.{now.hour}.{now.minute}.{now.second}.npz"
+            nowr=dt.now()
+            OUTFILE=f"{OUTFILE_SUFFIX}_{nowr.year}.{nowr.day}.{nowr.hour}.{nowr.minute}.{nowr.second}.npz"
             np.savez_compressed(OUTFILE, freq_Hz=f_abs.astype(np.float64), psd_dB=psd_db.astype(np.float32),
                     center_Hz=CENTER_HZ, fs_Hz=SAMP_RATE, frames=good, window="hann",
                     dc_notch=APPLY_DC_NOTCH, samples_per_frame=SAMPLES_PER_FRAME, time=now.isoformat())

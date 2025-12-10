@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin python3
 """
-RTL-SDR hydrogen line FFT integrator (windowed PSD averaging)
+RTL-SDR hydrogen line FFT integrator (windowed PSD averaging) by Taj Entabi
 """
 
 from rtlsdr import RtlSdr
@@ -8,11 +8,12 @@ import numpy as np
 import sys
 from pathlib import Path
 import tkinter as tk
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta
 import time
 
 CENTER_HZ = 1_420_435_752 # 1420.405752 MHz
 SAMP_RATE = 2_048_000
+PPM_CORR = 0 # PPM correction
 GAIN_DB = 49.6 # pick closest valid gain if exact not available
 SAMPLES_PER_FRAME = 262_144 # power of 2 for fast FFT (~0.128 s @ 2.048 MS/s)
 FRAMES = 1200 # ~2.5 min integration
@@ -20,14 +21,14 @@ WARMUP_FRAMES = 10 # discard to let AGC/LNA settle; AGC disabled anyway
 APPLY_DC_NOTCH = True # remove a few bins around DC (zero IF)
 DC_BINS = 3
 OUTFILE_SUFFIX = "HAspectrum"
-OBS_DUR_HRS = 6
-INTERVAL_MINS = 10
+INTERVAL = timedelta(minutes=5)
+OBS_DURATION = timedelta(hours=5)
 
 def initialize_sdr():
     sdr = RtlSdr()
     sdr.sample_rate = SAMP_RATE
     sdr.center_freq = CENTER_HZ
-    sdr.freq_correction = 60  # PPM
+    sdr.freq_correction = PPM_CORR
     sdr.set_agc_mode(False)
     try:
         valid = np.array(sdr.valid_gains_db, dtype=float)
@@ -55,13 +56,23 @@ def frame_psd(x: np.ndarray, fs: float):
 
 def main():
     sdr = None
-    # Calculate num of observations and start integration loop
-    obsnum = (OBS_DUR_HRS*60)/INTERVAL_MINS
+    # start integration loop
     try:
-        for obs in range(obsnum):
-            sdr = initialize_sdr()
-            print("Center: %.6f MHz | Fs: %.3f MS/s | Gain: %s" %
-                (sdr.center_freq/1e6, sdr.sample_rate/1e6, str(sdr.gain)))
+        sdr = initialize_sdr()
+        print("Center: %.6f MHz | Fs: %.3f MS/s | Gain: %s" %
+            (sdr.center_freq/1e6, sdr.sample_rate/1e6, str(sdr.gain)))
+        start_time=dt.now()
+        end_time=start_time+OBS_DURATION
+        next_time = start_time
+        obs_idx=0
+        while dt.now()<end_time:
+            now=dt.now()
+            if now < next_time:
+                sleepytime = (next_time-now).total_seconds()
+                print(f"Waiting {sleepytime:.1f}s until next integration...")
+                time.sleep(max(0,sleepytime))
+            obs_idx+=1
+            print(f"\n*** Starting integration {obs_idx} at {dt.now().isoformat()} ***")
             # Collect digital sig from SDR
             for _ in range(WARMUP_FRAMES):
                 _ = sdr.read_samples(SAMPLES_PER_FRAME)
@@ -93,13 +104,12 @@ def main():
             psd_db = 10*np.log10(psd_avg + 1e-20)
             Path(".").mkdir(parents=True, exist_ok=True)
             # Append timestamp from internal RTC and save frequency domain to npz
-            now=dt.now()
             OUTFILE=f"{OUTFILE_SUFFIX}_{now.year}.{now.day}.{now.hour}.{now.minute}.{now.second}.npz"
             np.savez_compressed(OUTFILE, freq_Hz=f_abs.astype(np.float64), psd_dB=psd_db.astype(np.float32),
                     center_Hz=CENTER_HZ, fs_Hz=SAMP_RATE, frames=good, window="hann",
                     dc_notch=APPLY_DC_NOTCH, samples_per_frame=SAMPLES_PER_FRAME, time=now.isoformat())
             print(f"Saved: {OUTFILE} (frames={good})")
-            time.sleep(INTERVAL_MINS*60)
+            next_time+=INTERVAL
     except Exception as e:
         sys.exit(f"Err: {e}")
     finally:
